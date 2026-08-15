@@ -1,0 +1,163 @@
+---
+title: "Comparative TCGA-BRCA / TCGA-LUAD Differential Expression Pipeline"
+author: "[Your Full Name]"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk_set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 9, fig.height = 6, fig.path = "figures/")
+```
+
+```{r packages}
+library(TCGAbiolinks); library(SummarizedExperiment); library(DESeq2)
+library(clusterProfiler); library(org.Hs.eg.db); library(survival); library(survminer)
+library(pheatmap); library(EnhancedVolcano); library(dplyr); library(UpSetR)
+```
+
+## Helper functions
+
+```{r helpers}
+get_subsampled_data <- function(project, n_tumor = 200, seed = 42) {
+  query <- GDCquery(project = project, data.category = "Transcriptome Profiling",
+                     data.type = "Gene Expression Quantification", workflow.type = "STAR - Counts")
+  GDCdownload(query)
+  data <- GDCprepare(query)
+
+  tumor  <- colnames(data)[colData(data)$sample_type == "Primary Tumor"]
+  normal <- colnames(data)[colData(data)$sample_type == "Solid Tissue Normal"]
+
+  set.seed(seed)
+  keep <- c(normal, sample(tumor, n_tumor))
+  data_sub <- data[, keep]
+  colData(data_sub)$sample_type <- factor(colData(data_sub)$sample_type,
+                                           levels = c("Solid Tissue Normal", "Primary Tumor"))
+  list(full = data, sub = data_sub)
+}
+
+run_deseq <- function(data_sub) {
+  dds <- DESeqDataSet(data_sub, design = ~ sample_type)
+  dds <- dds[rowSums(counts(dds)) >= 10, ]
+  dds <- DESeq(dds)
+
+  res_df <- as.data.frame(results(dds))
+  res_df$gene <- rownames(res_df)
+  res_df$ensembl_clean <- sub("\\..*", "", res_df$gene)
+  symbols <- mapIds(org.Hs.eg.db, keys = res_df$ensembl_clean, column = "SYMBOL",
+                     keytype = "ENSEMBL", multiVals = "first")
+  res_df$symbol <- ifelse(is.na(symbols[res_df$ensembl_clean]), res_df$gene, symbols[res_df$ensembl_clean])
+  list(dds = dds, res = res_df)
+}
+
+sig_genes <- function(res_df, padj_cut = 0.05, lfc_cut = 1) {
+  res_df %>% filter(!is.na(padj), padj < padj_cut, abs(log2FoldChange) > lfc_cut)
+}
+
+run_go_bp <- function(ensembl_ids, title) {
+  entrez <- bitr(ensembl_ids, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+  ego <- enrichGO(entrez$ENTREZID, OrgDb = org.Hs.eg.db, ont = "BP",
+                   pAdjustMethod = "BH", pvalueCutoff = 0.05, readable = TRUE)
+  print(dotplot(ego, showCategory = 15, title = title))
+  ego
+}
+
+plot_km <- function(gene_id, gene_label, vsd_full, clinical) {
+  expr <- assay(vsd_full)[gene_id, ]
+  df <- data.frame(patient = substr(colnames(vsd_full), 1, 12), expr = expr)
+  merged <- merge(df, clinical, by.x = "patient", by.y = "submitter_id")
+  merged$time  <- ifelse(merged$vital_status == "Dead", merged$days_to_death, merged$days_to_last_follow_up)
+  merged$event <- ifelse(merged$vital_status == "Dead", 1, 0)
+  merged <- merged[!is.na(merged$time) & merged$time >= 0, ]
+  merged$group <- ifelse(merged$expr > median(merged$expr), "High", "Low")
+
+  fit <- survfit(Surv(time, event) ~ group, data = merged)
+  print(ggsurvplot(fit, data = merged, pval = TRUE, risk.table = TRUE,
+                    title = paste(gene_label, "Expression and Overall Survival"),
+                    legend.title = paste(gene_label, "Expression"), legend.labs = c("High", "Low")))
+  list(fit = fit, data = merged)
+}
+```
+
+## BRCA pipeline
+
+```{r brca}
+brca <- get_subsampled_data("TCGA-BRCA")
+brca_deseq <- run_deseq(brca$sub)
+res_brca <- brca_deseq$res
+write.csv(res_brca, "TCGA_BRCA_DESeq2_results.csv", row.names = FALSE)
+
+EnhancedVolcano(res_brca, lab = res_brca$symbol, x = "log2FoldChange", y = "padj",
+                pCutoff = 0.05, FCcutoff = 1, title = "Tumour vs Normal - BRCA", subtitle = "TCGA-BRCA")
+```
+
+```{r brca-heatmap}
+top50 <- sig_genes(res_brca) %>% arrange(padj) %>% head(50)
+vsd_brca <- vst(brca_deseq$dds, blind = FALSE)
+mat <- assay(vsd_brca)[top50$gene, ]
+rownames(mat) <- top50$symbol
+mat_scaled <- t(scale(t(mat)))
+annotation <- data.frame(Condition = colData(brca$sub)$sample_type, row.names = colnames(mat))
+pheatmap(mat_scaled, annotation_col = annotation, show_rownames = TRUE, show_colnames = FALSE,
+         color = colorRampPalette(c("#2166AC", "white", "#B2182B"))(100), main = "Top 50 DEGs: BRCA")
+```
+
+```{r brca-go}
+brca_up <- res_brca %>% filter(!is.na(padj), padj < 0.01, log2FoldChange > 1.5) %>% pull(ensembl_clean)
+go_brca_up <- run_go_bp(brca_up, "Enriched Biological Processes in BRCA Tumors")
+```
+
+```{r brca-top10}
+top10 <- sig_genes(res_brca) %>% arrange(padj) %>% head(10)
+writeLines(unique(top10$symbol), "top10_BRCA_genes.txt")
+```
+
+## Survival analysis (full BRCA cohort)
+
+```{r survival}
+clinical <- GDCquery_clinic(project = "TCGA-BRCA", type = "clinical")
+tumor_full <- brca$full[, colData(brca$full)$sample_type == "Primary Tumor"]
+dds_full <- DESeqDataSet(tumor_full, design = ~ 1)
+dds_full <- dds_full[rowSums(counts(dds_full)) >= 10, ]
+vsd_full <- vst(dds_full, blind = TRUE)
+
+km_mmp11   <- plot_km("ENSG00000099953.10", "MMP11", vsd_full, clinical)
+km_col11a1 <- plot_km("ENSG00000060718.22", "COL11A1", vsd_full, clinical)
+```
+
+## LUAD pipeline
+
+```{r luad}
+luad <- get_subsampled_data("TCGA-LUAD")
+res_luad <- run_deseq(luad$sub)$res
+write.csv(res_luad, "TCGA_LUAD_DESeq2_results.csv", row.names = FALSE)
+```
+
+## Cross-cancer comparison
+
+```{r intersect}
+brca_sig <- sig_genes(res_brca)$ensembl_clean
+luad_sig <- sig_genes(res_luad)$ensembl_clean
+
+shared_degs    <- intersect(brca_sig, luad_sig)
+brca_only_degs <- setdiff(brca_sig, luad_sig)
+luad_only_degs <- setdiff(luad_sig, brca_sig)
+
+cat("Shared:", length(shared_degs), "| BRCA-only:", length(brca_only_degs), "| LUAD-only:", length(luad_only_degs), "\n")
+
+upset(fromExpression(c(
+  "BRCA"          = length(brca_only_degs),
+  "LUAD"          = length(luad_only_degs),
+  "BRCA&LUAD"     = length(shared_degs)
+)), order.by = "freq")
+```
+
+```{r comparative-go}
+go_shared <- run_go_bp(shared_degs,    "Shared Pan-Cancer DEGs: GO Biological Process")
+go_brca   <- run_go_bp(brca_only_degs, "BRCA-Specific DEGs: GO Biological Process")
+go_luad   <- run_go_bp(luad_only_degs, "LUAD-Specific DEGs: GO Biological Process")
+```
+
+## Session info
+
+```{r session}
+sessionInfo()
+```

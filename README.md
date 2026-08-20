@@ -2,7 +2,7 @@
 
 Reproducible R pipeline for a comparative differential gene expression (DGE), functional enrichment, survival, and protein-interaction network analysis of TCGA-BRCA (breast invasive carcinoma) and TCGA-LUAD (lung adenocarcinoma), using public TCGA RNA-sequencing data.
 
-This repository accompanies the manuscript *"Convergent and tissue-specific transcriptomic programs in breast and lung adenocarcinoma: a comparative RNA-sequencing, survival, and protein-interaction network analysis using TCGA data"* (Dipul Poudel, ISMT College, Chitwan, Nepal — submitted to PLOS ONE).
+This repository accompanies the manuscript *"Convergent and tissue-specific transcriptomic programs in breast and lung adenocarcinoma: a comparative RNA-sequencing, survival, and protein-interaction network analysis using TCGA data"* .
 
 ## Key findings
 
@@ -51,13 +51,6 @@ Then open `analysis.Rmd` in RStudio and run all chunks in order. Data download (
 
 All raw data are public and unrestricted, available from the NCI Genomic Data Commons (https://portal.gdc.cancer.gov) under project identifiers **TCGA-BRCA** and **TCGA-LUAD**. No proprietary, restricted-access, or personally identifying data are used or redistributed in this repository — only derived summary statistics (DESeq2 and GO enrichment result tables).
 
-## Citation
-
-If you use this pipeline or its results, please cite:
-
-> Poudel D. Convergent and tissue-specific transcriptomic programs in breast and lung adenocarcinoma: a comparative RNA-sequencing, survival, and protein-interaction network analysis using TCGA data. *Submitted to PLOS ONE, 2026.*
-
-(Citation will be updated with full publication details upon acceptance.)
 
 ## License
 

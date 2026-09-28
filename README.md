@@ -4,14 +4,6 @@ Reproducible R pipeline for a comparative differential gene expression (DGE), fu
 
 This repository accompanies the manuscript *"Convergent and tissue-specific transcriptomic programs in breast and lung adenocarcinoma: a comparative RNA-sequencing, survival, and protein-interaction network analysis using TCGA data"*.
 
-## Key Findings
-
-- **Differential Expression Landscape:** Of 43,813 genes evaluated in TCGA-BRCA, **11,226 were significantly differentially expressed** (\(p_{\text{adj}} < 0.05\), \(\vert{}\log_2\text{FC}\vert{} > 1\)), comprising 6,517 upregulated and 4,709 downregulated transcripts in tumor vs. normal tissue.
-- **Top Stromal Drivers:** The two most significant dysregulated transcripts were **MMP11** (\(\log_2\text{FC} = 6.32\)) and **COL11A1** (\(\log_2\text{FC} = 6.30\)), identifying them as dominant stroma-remodeling biomarkers.
-- **Cross-Cancer Overlaps:** Comparative filtering against TCGA-LUAD (14,774 significant DEGs) isolated **5,795 shared core DEGs** across both malignancies. Functional pathways diverge cleanly between shared, BRCA-specific (lipid/hormonal metabolism), and LUAD-specific (adaptive immunity and ciliary motility) modules.
-- **Direction-Split Pathway Enrichment:** Strategic splitting of shared and tissue-specific gene sets by regulation direction revealed sharp functional partitioning. For example, LUAD-specific upregulated programs are strongly enriched for organelle fission, nuclear division, and meiotic cell cycle processes, whereas tissue-specific downregulated streams govern separate physiological profiles.
-- **Confounded Prognostic Assessment:** Multivariate Cox proportional hazards modeling (adjusting for patient age and clinical TNM staging matrix criteria, \(N = 1082\)) demonstrated that high DGE significance does not uniformly imply survival liability. In adjusted models, high expression of **MMP11** (\(\text{HR} = 1.103\), \(95\%\text{ CI } [0.917 - 1.326]\), \(p = 0.298\)) and **COL11A1** (\(\text{HR} = 1.146\), \(95\%\text{ CI } [0.967 - 1.358]\), \(p = 0.115\)) were not independent prognostic predictors, confirming that crude transcriptional abundance is secondary to formal staging criteria.
-
 ## Repository Contents
 
 | File / Folder | Description |
